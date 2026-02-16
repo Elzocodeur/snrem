@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Identity BB - Test UI</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; color: #1a1a2e; padding: 20px; }
+    h1 { text-align: center; margin-bottom: 4px; font-size: 1.5rem; }
+    .subtitle { text-align: center; color: #666; margin-bottom: 24px; font-size: 0.9rem; }
+    .subtitle a { color: #4361ee; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 900px; margin: 0 auto; }
+    .card { background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .card h2 { font-size: 1rem; margin-bottom: 12px; color: #4361ee; }
+    label { display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 4px; margin-top: 8px; color: #555; }
+    input { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; }
+    input:focus { outline: none; border-color: #4361ee; }
+    button { margin-top: 12px; padding: 8px 16px; background: #4361ee; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem; width: 100%; }
+    button:hover { background: #3a56d4; }
+    button:disabled { background: #aaa; cursor: not-allowed; }
+    .btn-secondary { background: #6c757d; }
+    .btn-secondary:hover { background: #5a6268; }
+    .btn-danger { background: #e63946; }
+    .btn-danger:hover { background: #c5303c; }
+    .result { margin-top: 12px; padding: 10px; background: #f8f9fa; border-radius: 4px; font-size: 0.8rem; word-break: break-all; max-height: 200px; overflow-y: auto; white-space: pre-wrap; font-family: 'SF Mono', Monaco, Consolas, monospace; }
+    .result.error { background: #ffe0e0; color: #c00; }
+    .result.success { background: #e0ffe0; color: #060; }
+    .full-width { grid-column: 1 / -1; }
+    .jwt-section { margin-top: 8px; }
+    .jwt-section summary { cursor: pointer; font-size: 0.8rem; color: #4361ee; }
+    .jwt-payload { padding: 8px; background: #f0f0f0; border-radius: 4px; font-family: monospace; font-size: 0.75rem; margin-top: 4px; white-space: pre-wrap; max-height: 150px; overflow-y: auto; }
+    .token-display { font-size: 0.7rem; color: #888; word-break: break-all; margin-top: 4px; }
+    .status-bar { text-align: center; margin-bottom: 16px; padding: 8px; background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); max-width: 900px; margin: 0 auto 16px; font-size: 0.85rem; }
+    .status-bar .logged-in { color: #2a9d8f; font-weight: 600; }
+    .status-bar .logged-out { color: #e63946; }
+  </style>
+</head>
+<body>
+  <h1>Identity Building Block</h1>
+  <p class="subtitle">Test UI &mdash; <a href="/api/docs" target="_blank">Swagger UI</a></p>
+
+  <div class="status-bar" id="statusBar">
+    <span class="logged-out">Not logged in</span>
+  </div>
+
+  <div class="grid">
+    <!-- Register -->
+    <div class="card">
+      <h2>Register</h2>
+      <label for="regEmail">Email</label>
+      <input id="regEmail" type="email" placeholder="user@example.com" />
+      <label for="regPassword">Password</label>
+      <input id="regPassword" type="password" placeholder="Min 8 characters" />
+      <label for="regFirst">First Name</label>
+      <input id="regFirst" type="text" placeholder="John" />
+      <label for="regLast">Last Name</label>
+      <input id="regLast" type="text" placeholder="Doe" />
+      <button onclick="doRegister()">Register</button>
+      <div id="registerResult" class="result" style="display:none"></div>
+    </div>
+
+    <!-- Login -->
+    <div class="card">
+      <h2>Login</h2>
+      <label for="loginEmail">Email</label>
+      <input id="loginEmail" type="email" placeholder="user@example.com" />
+      <label for="loginPassword">Password</label>
+      <input id="loginPassword" type="password" placeholder="Password" />
+      <button onclick="doLogin()">Login</button>
+      <div id="loginResult" class="result" style="display:none"></div>
+    </div>
+
+    <!-- Profile -->
+    <div class="card">
+      <h2>Profile</h2>
+      <p style="font-size:0.8rem;color:#888;margin-bottom:8px;">Fetch your profile using the stored JWT.</p>
+      <button onclick="doProfile()">Get Profile</button>
+      <button class="btn-danger" onclick="doLogout()" style="margin-top:8px;">Logout</button>
+      <div id="profileResult" class="result" style="display:none"></div>
+    </div>
+
+    <!-- Refresh Token -->
+    <div class="card">
+      <h2>Refresh Token</h2>
+      <p style="font-size:0.8rem;color:#888;margin-bottom:8px;">Exchange your refresh token for a new access token.</p>
+      <button class="btn-secondary" onclick="doRefresh()">Refresh Token</button>
+      <div id="refreshResult" class="result" style="display:none"></div>
+    </div>
+
+    <!-- JWT Panel -->
+    <div class="card full-width">
+      <h2>JWT Token Info</h2>
+      <div id="jwtPanel" style="font-size:0.85rem;color:#888;">Login to see token details.</div>
+    </div>
+  </div>
+
+  <script>
+    const API = '';
+    let accessToken = null;
+    let refreshToken = null;
+
+    function showResult(id, data, isError) {
+      const el = document.getElementById(id);
+      el.style.display = 'block';
+      el.className = 'result ' + (isError ? 'error' : 'success');
+      el.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+    }
+
+    function updateStatus() {
+      const bar = document.getElementById('statusBar');
+      if (accessToken) {
+        const payload = decodeJwt(accessToken);
+        bar.innerHTML = '<span class="logged-in">Logged in as ' + (payload.email || 'unknown') + '</span>';
+      } else {
+        bar.innerHTML = '<span class="logged-out">Not logged in</span>';
+      }
+    }
+
+    function decodeJwt(token) {
+      try {
+        const parts = token.split('.');
+        if (parts.length !== 3) return null;
+        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+        return payload;
+      } catch { return null; }
+    }
+
+    function updateJwtPanel() {
+      const panel = document.getElementById('jwtPanel');
+      if (!accessToken) {
+        panel.innerHTML = 'Login to see token details.';
+        return;
+      }
+      const payload = decodeJwt(accessToken);
+      const exp = payload && payload.exp ? new Date(payload.exp * 1000).toLocaleString() : 'N/A';
+      panel.innerHTML =
+        '<div><strong>Access Token</strong> (expires: ' + exp + ')</div>' +
+        '<div class="token-display">' + accessToken + '</div>' +
+        '<details class="jwt-section" open><summary>Decoded Payload</summary>' +
+        '<div class="jwt-payload">' + JSON.stringify(payload, null, 2) + '</div></details>';
+      if (refreshToken) {
+        panel.innerHTML += '<div style="margin-top:8px;"><strong>Refresh Token</strong></div>' +
+          '<div class="token-display">' + refreshToken + '</div>';
+      }
+    }
+
+    async function apiFetch(path, options = {}) {
+      const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+      if (accessToken && !options.noAuth) {
+        headers['Authorization'] = 'Bearer ' + accessToken;
+      }
+      const res = await fetch(API + path, { ...options, headers });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw { status: res.status, ...body };
+      return body;
+    }
+
+    async function doRegister() {
+      try {
+        const data = await apiFetch('/api/v1/auth/register', {
+          method: 'POST',
+          noAuth: true,
+          body: JSON.stringify({
+            email: document.getElementById('regEmail').value,
+            password: document.getElementById('regPassword').value,
+            firstName: document.getElementById('regFirst').value || undefined,
+            lastName: document.getElementById('regLast').value || undefined,
+          }),
+        });
+        showResult('registerResult', data, false);
+      } catch (e) {
+        showResult('registerResult', e, true);
+      }
+    }
+
+    async function doLogin() {
+      try {
+        const data = await apiFetch('/api/v1/auth/login', {
+          method: 'POST',
+          noAuth: true,
+          body: JSON.stringify({
+            email: document.getElementById('loginEmail').value,
+            password: document.getElementById('loginPassword').value,
+          }),
+        });
+        const inner = data.data || data;
+        accessToken = inner.accessToken || inner.access_token || null;
+        refreshToken = inner.refreshToken || inner.refresh_token || null;
+        updateStatus();
+        updateJwtPanel();
+        showResult('loginResult', data, false);
+      } catch (e) {
+        showResult('loginResult', e, true);
+      }
+    }
+
+    async function doProfile() {
+      if (!accessToken) { showResult('profileResult', 'Not logged in. Please login first.', true); return; }
+      try {
+        const data = await apiFetch('/api/v1/auth/profile');
+        showResult('profileResult', data, false);
+      } catch (e) {
+        showResult('profileResult', e, true);
+      }
+    }
+
+    async function doRefresh() {
+      if (!refreshToken) { showResult('refreshResult', 'No refresh token available. Please login first.', true); return; }
+      try {
+        const data = await apiFetch('/api/v1/auth/refresh', {
+          method: 'POST',
+          body: JSON.stringify({ refreshToken }),
+        });
+        const inner = data.data || data;
+        accessToken = inner.accessToken || inner.access_token || accessToken;
+        refreshToken = inner.refreshToken || inner.refresh_token || refreshToken;
+        updateStatus();
+        updateJwtPanel();
+        showResult('refreshResult', data, false);
+      } catch (e) {
+        showResult('refreshResult', e, true);
+      }
+    }
+
+    function doLogout() {
+      accessToken = null;
+      refreshToken = null;
+      updateStatus();
+      updateJwtPanel();
+      document.getElementById('profileResult').style.display = 'none';
+      document.getElementById('refreshResult').style.display = 'none';
+    }
+  </script>
+</body>
+</html>

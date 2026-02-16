@@ -1,0 +1,169 @@
+// -----------------------------------------------------------------------
+// To switch to PostgreSQL:
+//   1. Change provider below from "sqlite" to "postgresql"
+//   2. In OidcClient model, change the three String fields (redirectUris,
+//      scopes, grantTypes) back to String[] and remove their @default JSON
+//   3. Update DATABASE_URL in .env to a PostgreSQL connection string
+//   4. Delete prisma/migrations/ and re-run: npx prisma migrate dev --name init
+// -----------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// SQLite does not support enums. Status is stored as a String with a default.
+// For PostgreSQL: uncomment the enum and change status type to UserStatus.
+// enum UserStatus {
+//   ACTIVE
+//   INACTIVE
+//   SUSPENDED
+// }
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  nationalId   String?   @unique @map("national_id")
+  firstName    String?   @map("first_name")
+  lastName     String?   @map("last_name")
+  dateOfBirth  DateTime? @map("date_of_birth")
+  phone        String?
+  status       String    @default("ACTIVE")              // For PostgreSQL use UserStatus enum
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  userRoles          UserRole[]
+  refreshTokens      RefreshToken[]
+  authorizationCodes OidcAuthorizationCode[]
+  auditLogs          AuditLog[]
+
+  @@map("users")
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  userRoles       UserRole[]
+  rolePermissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  resource    String
+  action      String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  rolePermissions RolePermission[]
+
+  @@unique([resource, action])
+  @@map("permissions")
+}
+
+model UserRole {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  roleId     String   @map("role_id")
+  assignedAt DateTime @default(now()) @map("assigned_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@map("user_roles")
+}
+
+model RolePermission {
+  id           String   @id @default(uuid())
+  roleId       String   @map("role_id")
+  permissionId String   @map("permission_id")
+  assignedAt   DateTime @default(now()) @map("assigned_at")
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  family    String
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([family])
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model OidcClient {
+  id           String   @id @default(uuid())
+  clientId     String   @unique @map("client_id")
+  clientSecret String   @map("client_secret")
+  clientName   String   @map("client_name")
+  redirectUris String   @map("redirect_uris")                                    // JSON array, e.g. '["http://localhost:3000/callback"]'. For PostgreSQL use String[]
+  scopes       String   @default("[\"openid\",\"profile\",\"email\"]")             // JSON array. For PostgreSQL use String[] @default(["openid","profile","email"])
+  grantTypes   String   @default("[\"authorization_code\"]") @map("grant_types")   // JSON array. For PostgreSQL use String[] @default(["authorization_code"])
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  authorizationCodes OidcAuthorizationCode[]
+
+  @@map("oidc_clients")
+}
+
+model OidcAuthorizationCode {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  clientId    String   @map("oidc_client_id")
+  userId      String   @map("user_id")
+  redirectUri String   @map("redirect_uri")
+  scope       String
+  nonce       String?
+  expiresAt   DateTime @map("expires_at")
+  used        Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  client OidcClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("oidc_authorization_codes")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  action    String
+  resource  String
+  resourceId String? @map("resource_id")
+  userId    String?  @map("user_id")
+  oldValue  String?  @map("old_value")   // JSON string. For PostgreSQL use Json?
+  newValue  String?  @map("new_value")   // JSON string. For PostgreSQL use Json?
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([resource, action])
+  @@index([userId])
+  @@map("audit_logs")
+}
