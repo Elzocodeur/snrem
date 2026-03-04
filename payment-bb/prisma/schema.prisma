@@ -1,0 +1,177 @@
+// -----------------------------------------------------------------------
+// Payment Building Block - Prisma Schema
+// GovStack compliant payment service
+//
+// To switch to PostgreSQL:
+//   1. Change provider below from "sqlite" to "postgresql"
+//   2. Update array fields and JSON types accordingly
+//   3. Update DATABASE_URL in .env to a PostgreSQL connection string
+//   4. Delete prisma/migrations/ and re-run: npx prisma migrate dev --name init
+// -----------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Payment Provider (Stripe, Wave, Orange Money, PayPal, etc.)
+model PaymentProvider {
+  id          String   @id @default(uuid())
+  name        String   @unique // "stripe", "wave", "orange_money", "paypal"
+  displayName String   @map("display_name")
+  description String?
+  isActive    Boolean  @default(true) @map("is_active")
+  config      String?  // JSON string with provider-specific config. For PostgreSQL use Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  transactions Transaction[]
+
+  @@map("payment_providers")
+}
+
+// Transaction Status Enum (stored as String in SQLite)
+// For PostgreSQL: uncomment enum and change status type to TransactionStatus
+// enum TransactionStatus {
+//   PENDING
+//   PROCESSING
+//   COMPLETED
+//   FAILED
+//   CANCELLED
+//   REFUNDED
+// }
+
+// Main Transaction Model
+model Transaction {
+  id                String   @id @default(uuid())
+  amount            Float
+  currency          String   @default("XOF")
+  status            String   @default("PENDING") // For PostgreSQL use TransactionStatus enum
+  paymentProviderId String   @map("payment_provider_id")
+  userId            String   @map("user_id") // Reference to user from identity-bb
+  invoiceId         String?  @map("invoice_id")
+  externalId        String?  @unique @map("external_id") // Provider's transaction ID
+  description       String?
+  metadata          String?  // JSON string. For PostgreSQL use Json?
+  ipAddress         String?  @map("ip_address")
+  userAgent         String?  @map("user_agent")
+  failureReason     String?  @map("failure_reason")
+  completedAt       DateTime? @map("completed_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  paymentProvider PaymentProvider @relation(fields: [paymentProviderId], references: [id])
+  invoice         Invoice?        @relation(fields: [invoiceId], references: [id])
+  refunds         Refund[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([paymentProviderId])
+  @@map("transactions")
+}
+
+// Invoice Status Enum
+// For PostgreSQL: uncomment enum and change status type to InvoiceStatus
+// enum InvoiceStatus {
+//   DRAFT
+//   PENDING
+//   PAID
+//   PARTIALLY_PAID
+//   OVERDUE
+//   CANCELLED
+// }
+
+// Invoice Model
+model Invoice {
+  id           String   @id @default(uuid())
+  invoiceNumber String  @unique @map("invoice_number")
+  userId       String   @map("user_id") // Reference to user from identity-bb
+  status       String   @default("DRAFT") // For PostgreSQL use InvoiceStatus enum
+  subtotal     Float
+  taxAmount    Float    @default(0) @map("tax_amount")
+  totalAmount  Float    @map("total_amount")
+  currency     String   @default("XOF")
+  dueDate      DateTime? @map("due_date")
+  paidAt       DateTime? @map("paid_at")
+  metadata     String?  // JSON string. For PostgreSQL use Json?
+  notes        String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  items        InvoiceItem[]
+  transactions Transaction[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("invoices")
+}
+
+// Invoice Items (line items)
+model InvoiceItem {
+  id          String  @id @default(uuid())
+  invoiceId   String  @map("invoice_id")
+  description String
+  quantity    Float   @default(1)
+  unitPrice   Float   @map("unit_price")
+  amount      Float   // quantity * unitPrice
+  metadata    String? // JSON string. For PostgreSQL use Json?
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@map("invoice_items")
+}
+
+// Refund Model
+model Refund {
+  id            String   @id @default(uuid())
+  transactionId String   @map("transaction_id")
+  amount        Float
+  reason        String?
+  status        String   @default("PENDING") // PENDING, COMPLETED, FAILED
+  externalId    String?  @unique @map("external_id") // Provider's refund ID
+  processedAt   DateTime? @map("processed_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  transaction Transaction @relation(fields: [transactionId], references: [id])
+
+  @@index([transactionId])
+  @@map("refunds")
+}
+
+// Webhook Events Log
+model WebhookEvent {
+  id         String   @id @default(uuid())
+  provider   String   // "stripe", "wave", etc.
+  eventType  String   @map("event_type")
+  payload    String   // JSON string. For PostgreSQL use Json
+  processed  Boolean  @default(false)
+  processedAt DateTime? @map("processed_at")
+  error      String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([provider, processed])
+  @@map("webhook_events")
+}
+
+// Audit Log for payment operations
+model AuditLog {
+  id         String   @id @default(uuid())
+  action     String
+  resource   String
+  resourceId String?  @map("resource_id")
+  userId     String?  @map("user_id")
+  oldValue   String?  @map("old_value") // JSON string. For PostgreSQL use Json?
+  newValue   String?  @map("new_value") // JSON string. For PostgreSQL use Json?
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([resource, action])
+  @@index([userId])
+  @@map("audit_logs")
+}

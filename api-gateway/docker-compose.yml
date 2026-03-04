@@ -1,0 +1,82 @@
+version: '3.8'
+
+# GovStack API Gateway Setup
+# This docker-compose file sets up the API Gateway for routing requests to Building Blocks
+
+services:
+  # API Gateway (Nginx)
+  api-gateway:
+    image: nginx:alpine
+    container_name: govstack-api-gateway
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./logs:/var/log/nginx
+    networks:
+      - govstack-network
+    depends_on:
+      - identity-bb
+      - payment-bb
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Identity Building Block
+  identity-bb:
+    build: ../identity-bb
+    container_name: identity-bb
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:./prod.db
+      - JWT_SECRET=${JWT_SECRET}
+      - PORT=3000
+    volumes:
+      - identity-data:/app/prisma
+    networks:
+      - govstack-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Payment Building Block
+  payment-bb:
+    build: ../payment-bb
+    container_name: payment-bb
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:./prod.db
+      - JWT_SECRET=${JWT_SECRET}
+      - PORT=3001
+      - IDENTITY_BB_URL=http://identity-bb:3000
+      - USE_IM_BB=false
+    volumes:
+      - payment-data:/app/prisma
+    networks:
+      - govstack-network
+    depends_on:
+      - identity-bb
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  govstack-network:
+    driver: bridge
+
+volumes:
+  identity-data:
+  payment-data:

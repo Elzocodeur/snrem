@@ -1,0 +1,257 @@
+# GovStack Service Registry Configuration
+# Payment Building Block Service Definition
+#
+# This file defines the services provided by Payment BB
+# for registration with the Information Mediator (IM-BB)
+
+buildingBlock:
+  identifier: "PAYMENT-BB"
+  name: "Payment Building Block"
+  version: "1.0.0"
+  description: "GovStack-compliant payment processing service supporting transactions, invoices, and multiple payment providers"
+  provider:
+    organization: "SenRM"
+    country: "SN"
+    contact: "admin@senrm.gov.sn"
+
+# Authentication configuration
+authentication:
+  type: "OAuth2"
+  provider: "IDENTITY-BB"
+  tokenEndpoint: "http://localhost:3000/api/auth/login"
+  authorizationEndpoint: "http://localhost:3000/oauth/authorize"
+  scopes:
+    - "payment:read"
+    - "payment:create"
+    - "payment:update"
+    - "invoice:read"
+    - "invoice:create"
+    - "refund:create"
+    - "provider:read"
+
+# Service endpoints
+services:
+  # Transaction Services
+  - serviceName: "payment-transaction-create"
+    version: "1.0"
+    category: "transaction"
+    baseUrl: "/api/transactions"
+    authentication: "OAuth2"
+    requiredScopes: ["payment:create"]
+    endpoints:
+      - path: ""
+        method: "POST"
+        description: "Create a new payment transaction"
+        requiredPermissions: ["payment:create"]
+        requestBody:
+          schema: "CreateTransactionDto"
+        response:
+          schema: "Transaction"
+
+  - serviceName: "payment-transaction-list"
+    version: "1.0"
+    category: "transaction"
+    baseUrl: "/api/transactions"
+    authentication: "OAuth2"
+    requiredScopes: ["payment:read"]
+    endpoints:
+      - path: ""
+        method: "GET"
+        description: "List all transactions for authenticated user"
+        requiredPermissions: ["payment:read"]
+        response:
+          schema: "Transaction[]"
+
+  - serviceName: "payment-transaction-get"
+    version: "1.0"
+    category: "transaction"
+    baseUrl: "/api/transactions"
+    authentication: "OAuth2"
+    requiredScopes: ["payment:read"]
+    endpoints:
+      - path: "/{id}"
+        method: "GET"
+        description: "Get transaction by ID"
+        requiredPermissions: ["payment:read"]
+        response:
+          schema: "Transaction"
+
+  - serviceName: "payment-transaction-stats"
+    version: "1.0"
+    category: "transaction"
+    baseUrl: "/api/transactions"
+    authentication: "OAuth2"
+    requiredScopes: ["payment:read"]
+    endpoints:
+      - path: "/stats"
+        method: "GET"
+        description: "Get transaction statistics"
+        requiredPermissions: ["payment:read"]
+        response:
+          schema: "TransactionStats"
+
+  # Invoice Services
+  - serviceName: "payment-invoice-create"
+    version: "1.0"
+    category: "invoice"
+    baseUrl: "/api/invoices"
+    authentication: "OAuth2"
+    requiredScopes: ["invoice:create"]
+    endpoints:
+      - path: ""
+        method: "POST"
+        description: "Create a new invoice"
+        requiredPermissions: ["invoice:create"]
+        requestBody:
+          schema: "CreateInvoiceDto"
+        response:
+          schema: "Invoice"
+
+  - serviceName: "payment-invoice-list"
+    version: "1.0"
+    category: "invoice"
+    baseUrl: "/api/invoices"
+    authentication: "OAuth2"
+    requiredScopes: ["invoice:read"]
+    endpoints:
+      - path: ""
+        method: "GET"
+        description: "List all invoices for authenticated user"
+        requiredPermissions: ["invoice:read"]
+        response:
+          schema: "Invoice[]"
+
+  - serviceName: "payment-invoice-get"
+    version: "1.0"
+    category: "invoice"
+    baseUrl: "/api/invoices"
+    authentication: "OAuth2"
+    requiredScopes: ["invoice:read"]
+    endpoints:
+      - path: "/{id}"
+        method: "GET"
+        description: "Get invoice by ID"
+        requiredPermissions: ["invoice:read"]
+        response:
+          schema: "Invoice"
+
+  # Payment Provider Services
+  - serviceName: "payment-provider-list"
+    version: "1.0"
+    category: "provider"
+    baseUrl: "/api/providers"
+    authentication: "None"
+    public: true
+    endpoints:
+      - path: ""
+        method: "GET"
+        description: "List all active payment providers (public endpoint)"
+        response:
+          schema: "PaymentProvider[]"
+
+  - serviceName: "payment-provider-get"
+    version: "1.0"
+    category: "provider"
+    baseUrl: "/api/providers"
+    authentication: "OAuth2"
+    requiredScopes: ["provider:read"]
+    endpoints:
+      - path: "/{id}"
+        method: "GET"
+        description: "Get payment provider details"
+        response:
+          schema: "PaymentProvider"
+
+  # Refund Services
+  - serviceName: "payment-refund-create"
+    version: "1.0"
+    category: "refund"
+    baseUrl: "/api/refunds"
+    authentication: "OAuth2"
+    requiredScopes: ["refund:create"]
+    endpoints:
+      - path: ""
+        method: "POST"
+        description: "Create a refund request"
+        requiredPermissions: ["refund:create"]
+        requestBody:
+          schema: "CreateRefundDto"
+        response:
+          schema: "Refund"
+
+  - serviceName: "payment-refund-list"
+    version: "1.0"
+    category: "refund"
+    baseUrl: "/api/refunds"
+    authentication: "OAuth2"
+    requiredScopes: ["payment:read"]
+    endpoints:
+      - path: ""
+        method: "GET"
+        description: "List refunds for a transaction"
+        requiredPermissions: ["payment:read"]
+        response:
+          schema: "Refund[]"
+
+  # Webhook Services (External providers)
+  - serviceName: "payment-webhook-stripe"
+    version: "1.0"
+    category: "webhook"
+    baseUrl: "/api/webhooks"
+    authentication: "None"
+    public: true
+    externalProvider: true
+    endpoints:
+      - path: "/stripe"
+        method: "POST"
+        description: "Stripe webhook endpoint"
+
+  - serviceName: "payment-webhook-wave"
+    version: "1.0"
+    category: "webhook"
+    baseUrl: "/api/webhooks"
+    authentication: "None"
+    public: true
+    externalProvider: true
+    endpoints:
+      - path: "/wave"
+        method: "POST"
+        description: "Wave webhook endpoint"
+
+  - serviceName: "payment-webhook-orange-money"
+    version: "1.0"
+    category: "webhook"
+    baseUrl: "/api/webhooks"
+    authentication: "None"
+    public: true
+    externalProvider: true
+    endpoints:
+      - path: "/orange-money"
+        method: "POST"
+        description: "Orange Money webhook endpoint"
+
+# Health and monitoring
+monitoring:
+  healthCheck:
+    path: "/health"
+    method: "GET"
+    public: true
+  metrics:
+    path: "/metrics"
+    method: "GET"
+    authentication: "OAuth2"
+    requiredScopes: ["admin:read"]
+
+# Dependencies on other Building Blocks
+dependencies:
+  - buildingBlock: "IDENTITY-BB"
+    purpose: "Authentication and user management"
+    services:
+      - "user-authentication"
+      - "user-info"
+      - "token-validation"
+
+# Data schemas (references to OpenAPI definitions)
+schemas:
+  location: "/api/docs-json"
+  format: "OpenAPI 3.1"

@@ -1,0 +1,121 @@
+version: '3.8'
+
+# GovStack Information Mediator Building Block (IM-BB)
+# Based on X-Road technology
+#
+# This is a STANDALONE deployment that can be used by all Building Blocks
+
+services:
+  # X-Road Security Server (Main component)
+  xroad-security-server:
+    image: niis/xroad-security-server-sidecar:7.3.2
+    container_name: im-bb-security-server
+    hostname: security-server
+    ports:
+      - "8080:8080"   # X-Road messaging API
+      - "8443:8443"   # Admin UI (HTTPS)
+      - "5500:5500"   # Message exchange
+      - "5577:5577"   # OCSP responses
+    environment:
+      - XROAD_TOKEN_PIN=1234567890
+      - XROAD_ADMIN_USER=xrd
+      - XROAD_ADMIN_PASSWORD=secret
+      - XROAD_DB_HOST=xroad-db
+      - XROAD_DB_PORT=5432
+      - XROAD_DB_PWD=xroad_db_password
+      - XROAD_LOG_LEVEL=INFO
+    volumes:
+      - xroad-config:/etc/xroad
+      - xroad-logs:/var/log/xroad
+      - ./config/globalconf:/etc/xroad/globalconf:ro
+    networks:
+      - im-bb-network
+    depends_on:
+      - xroad-db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # PostgreSQL Database for X-Road
+  xroad-db:
+    image: postgres:14-alpine
+    container_name: im-bb-database
+    environment:
+      - POSTGRES_USER=xroad
+      - POSTGRES_PASSWORD=xroad_db_password
+      - POSTGRES_DB=serverconf
+    volumes:
+      - xroad-db-data:/var/lib/postgresql/data
+    networks:
+      - im-bb-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U xroad"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Service Registry UI (Optional but recommended)
+  service-registry:
+    image: niis/xroad-catalog-lister:latest
+    container_name: im-bb-service-registry
+    ports:
+      - "8081:8080"
+    environment:
+      - SECURITY_SERVER_URL=http://xroad-security-server:8080
+    networks:
+      - im-bb-network
+    depends_on:
+      - xroad-security-server
+    restart: unless-stopped
+
+  # Monitoring (Prometheus - Optional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: im-bb-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - im-bb-network
+    restart: unless-stopped
+
+  # Grafana Dashboard (Optional)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: im-bb-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./config/grafana-dashboards:/etc/grafana/provisioning/dashboards:ro
+    networks:
+      - im-bb-network
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  xroad-config:
+  xroad-logs:
+  xroad-db-data:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  im-bb-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
